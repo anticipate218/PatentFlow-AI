@@ -20,3 +20,17 @@ test("keys are independent, zero disables the check, and separate isolates do no
   assert.equal(limiter.allow("synthetic-a", 0, 1000, 0), true);
   assert.equal(new RateLimiter().allow("synthetic-a", 1, 1000, 0), true);
 });
+
+test("a large map drops keys whose own window has passed, at most once per minute, and keeps active limits", () => {
+  const limiter = new RateLimiter();
+  for (let index = 0; index <= 5000; index += 1) assert.equal(limiter.allow(`synthetic-short-${index}`, 1, 1000, 0), true);
+  // The first sweep ran at t=0 and kept every key; the next one may not run before t=60000.
+  assert.equal(limiter.size, 5001);
+  assert.equal(limiter.allow("synthetic-long", 1, 3_600_000, 0), true);
+  assert.equal(limiter.allow("synthetic-mid", 1, 1000, 30_000), true);
+  assert.equal(limiter.size, 5003);
+  assert.equal(limiter.allow("synthetic-fresh", 1, 1000, 60_000), true);
+  // Short windows expired long ago; the hour-long key is still inside its window and keeps blocking.
+  assert.equal(limiter.size, 2);
+  assert.equal(limiter.allow("synthetic-long", 1, 3_600_000, 60_000), false);
+});
