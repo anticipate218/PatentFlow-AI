@@ -83,7 +83,7 @@ export function pptxText(slides: Array<{ no: number; xml: string }>): string {
 }
 
 export function sharedStrings(xml: string): string[] {
-  return [...xml.matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>/g)].map((item) => {
+  return [...xml.replace(/<si\b[^>]*\/>/g, "<si></si>").matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>/g)].map((item) => {
     const body = item[1].replace(/<rPh\b[\s\S]*?<\/rPh>/g, "").replace(/<t\b[^>]*\/>/g, "");
     return [...body.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map((text) => decodeEntities(text[1])).join("");
   });
@@ -110,7 +110,7 @@ export function sheetRows(xml: string, shared: string[], maxRows = 1500): string
       const raw = /<v\b[^>]*>([\s\S]*?)<\/v>/.exec(inner)?.[1];
       let value = "";
       if (type === "s") value = raw !== undefined ? shared[Number(raw)] ?? "" : "";
-      else if (type === "inlineStr") value = [...inner.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map((text) => decodeEntities(text[1])).join("");
+      else if (type === "inlineStr") value = [...inner.replace(/<t\b[^>]*\/>/g, "").matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map((text) => decodeEntities(text[1])).join("");
       else if (type === "b") value = raw === "1" ? "TRUE" : raw === "0" ? "FALSE" : "";
       else value = raw !== undefined ? decodeEntities(raw) : "";
       const index = ref ? Math.min(columnIndex(ref), 200) : cells.length;
