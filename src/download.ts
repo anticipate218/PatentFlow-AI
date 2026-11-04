@@ -13,6 +13,15 @@ export function saveBlob(blob: Blob, fileName: string): void {
 
 /** A file name safe on Windows, macOS and Linux. */
 export function safeFileName(value: string, fallback = "PatentFlow"): string {
-  const clean = value.replace(/[\\/:*?"<>|\r\n]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
-  return clean || fallback;
+  const clean = (input: string) => input
+    .replace(/[\\/:*?"<>|\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60)
+    .replace(/[. ]+$/g, "");
+  const candidate = clean(value) || clean(fallback) || "PatentFlow";
+  const baseName = candidate.split(".", 1)[0].replace(/[. ]+$/g, "");
+  return /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(baseName)
+    ? clean(`_${candidate}`)
+    : candidate;
 }
