@@ -37,6 +37,21 @@ test("xlsx shared strings, inline strings, gaps and sheet mapping", () => {
   assert.deepEqual(sheets, [{ name: "参数&尺寸", path: "xl/worksheets/sheet1.xml" }]);
 });
 
+test("xlsx shared strings preserve indexes of self-closing items", () => {
+  const shared = sharedStrings('<sst><si/><si><t>alpha</t></si><si /><si><t>beta</t></si><si/></sst>');
+  assert.deepEqual(shared, ["", "alpha", "", "beta", ""]);
+  const sheet = '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>1</v></c><c r="B1" t="s"><v>3</v></c></row></sheetData></worksheet>';
+  assert.deepEqual(sheetRows(sheet, shared), ["alpha | beta"]);
+});
+
+for (const empty of ['<t/>', '<t />', '<t xml:space="preserve"/>']) {
+  test(`xlsx inline strings ignore self-closing text nodes: ${empty}`, () => {
+    const inline = `<is><r>${empty}</r><r><t>alpha</t></r><r>${empty}</r><r><t xml:space="preserve"> &amp; beta</t></r><r>${empty}</r></is>`;
+    const sheet = `<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr">${inline}</c><c r="B1" t="inlineStr"><is>${empty}</is></c><c r="C1"><v>7</v></c></row></sheetData></worksheet>`;
+    assert.deepEqual(sheetRows(sheet, []), ["alpha & beta |  | 7"]);
+  });
+}
+
 test("htmlText drops scripts and keeps structure", () => {
   const text = htmlText("<html><style>p{}</style><body><h1>标题</h1><p>第一段&nbsp;内容</p><script>x()</script><ul><li>甲</li><li>乙</li></ul></body></html>");
   assert.equal(text, "标题\n第一段 内容\n- 甲\n- 乙");
