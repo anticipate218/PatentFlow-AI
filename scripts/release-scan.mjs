@@ -30,17 +30,23 @@ export function scanContent(file, input, knownSecrets = []) {
   return findings;
 }
 
+export function environmentSecrets(input) {
+  const secrets = [];
+  for (const line of input.split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*?)\s*$/);
+    if (match && /KEY|SECRET|TOKEN|ACCESS_CODES/.test(match[1])) {
+      const value = match[2].replace(/^["']|["']$/g, '');
+      secrets.push(...(match[1] === 'ACCESS_CODES' ? value.split(/[,\s]+/) : [value]));
+    }
+  }
+  return secrets;
+}
+
 function localSecrets(root) {
   const secrets = [];
   for (const name of fs.readdirSync(root).filter(name => /^(?:\.env|\.dev\.vars)/.test(name) && name !== '.env.example')) {
     if (!fs.statSync(path.join(root, name)).isFile()) continue;
-    for (const line of fs.readFileSync(path.join(root, name), 'utf8').split(/\r?\n/)) {
-      const match = line.match(/^\s*([A-Z_]+)\s*=\s*(.*?)\s*$/);
-      if (match && /KEY|SECRET|TOKEN|ACCESS_CODES/.test(match[1])) {
-        const value = match[2].replace(/^["']|["']$/g, '');
-        secrets.push(...(match[1] === 'ACCESS_CODES' ? value.split(/[,\s]+/) : [value]));
-      }
-    }
+    secrets.push(...environmentSecrets(fs.readFileSync(path.join(root, name), 'utf8')));
   }
   const credentialPath = path.join(root, '.credentials.json');
   if (fs.existsSync(credentialPath)) {

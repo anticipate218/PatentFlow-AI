@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { scanContent, forbiddenPath } from './release-scan.mjs';
+import { environmentSecrets, scanContent, forbiddenPath } from './release-scan.mjs';
 
 test('release scan rejects private inputs and historical backups', () => {
   for (const file of ['.env.local', '.env.deepseek-test.local', '.dev.vars', '.credentials.json', '.tmp-library/case.json', 'src/a.ts.pre-fix.bak', 'shots/customer.png', 'docs/references/paper.pdf']) {
@@ -18,6 +18,13 @@ test('release scan detects API tokens without including values in findings', () 
 test('release scan detects known secrets even inside binary assets', () => {
   const secret = 'synthetic-private-value-012345';
   assert.equal(scanContent('dist/asset.bin', Buffer.concat([Buffer.from([0,255]), Buffer.from(secret)]), [secret]).length, 1);
+});
+test('release scan reads secret variables whose names contain digits', () => {
+  const secret = 'synthetic-private-value-012345';
+  const knownSecrets = environmentSecrets(`OPENAI_V2_API_KEY=${secret}`);
+  const findings = scanContent('dist/asset.bin', Buffer.from(secret), knownSecrets);
+  assert.deepEqual(findings, [{ file: 'dist/asset.bin', line: 0, kind: 'known local secret' }]);
+  assert.equal(JSON.stringify(findings).includes(secret), false);
 });
 
 test('release scan detects search-provider tokens without local secret files',()=>{
