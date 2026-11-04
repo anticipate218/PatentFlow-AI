@@ -58,6 +58,10 @@ interface CallOptions {
 
 type Json = Record<string, unknown>;
 
+function isJson(value: unknown): value is Json {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 export const ANYSEARCH_BASE = "https://api.anysearch.com";
 
 export function anyEndpoint(baseUrl: string, path: "search" | "extract"): string {
@@ -173,11 +177,12 @@ export async function anySearch(cfg: SearchConfig, input: SearchInput, options: 
   const answer = await call(cfg, "search", payload, options);
   if (answer.failure) return { ok: false, status: answer.status, requestId: answer.requestId, results: [], detail: answer.failure, tookMs: answer.tookMs };
   const data = ((answer.body?.data ?? answer.body ?? {}) as Json) || {};
-  const list = Array.isArray(data.results) ? (data.results as Json[]) : [];
+  const list = Array.isArray(data.results) ? data.results : [];
   const results = list
+    .filter(isJson)
     .map((item) => ({
       title: typeof item.title === "string" && item.title.trim() ? item.title.trim() : "未命名结果",
-      url: typeof item.url === "string" ? item.url.trim() : "",
+      url: typeof item.url === "string" && isPublicHttpUrl(item.url.trim()) ? item.url.trim() : "",
       snippet: typeof item.snippet === "string" ? item.snippet.trim() : "",
       content: typeof item.content === "string" ? item.content.trim() : "",
     }))
@@ -199,11 +204,12 @@ export async function anyExtract(cfg: SearchConfig, url: string, options: CallOp
   if (answer.failure) return { ok: false, status: answer.status, requestId: answer.requestId, url: target, title: "", content: "", detail: answer.failure };
   const data = ((answer.body?.data ?? {}) as Json) || {};
   const content = typeof data.content === "string" ? data.content.trim() : "";
+  const responseUrl = typeof data.url === "string" && isPublicHttpUrl(data.url.trim()) ? data.url.trim() : target;
   return {
     ok: Boolean(content),
     status: answer.status,
     requestId: answer.requestId,
-    url: typeof data.url === "string" && data.url ? data.url : target,
+    url: responseUrl,
     title: typeof data.title === "string" ? data.title.trim() : "",
     content,
     detail: content ? `读到 ${content.length} 字，外部内容仅作线索。` : "这个网址没有可读正文。",

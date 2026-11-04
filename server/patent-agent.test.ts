@@ -50,6 +50,23 @@ test("anySearch sends the documented body and maps results", async () => {
   assert.equal(outcome.results[0].title, "CN1 一种云检测方法");
 });
 
+test("anySearch skips malformed results and strips unsafe links", async () => {
+  const outcome = await anySearch(search, { query: "云检测" }, {
+    fetchImpl: (async () => new Response(JSON.stringify({ code: 0, data: { results: [
+      null,
+      "invalid",
+      { title: "脚本链接", url: "javascript:alert(1)", snippet: "仍可作为文字线索" },
+      { title: "内网链接", url: "http://127.0.0.1/admin" },
+      { title: "公开链接", url: "https://example.com/patent", content: "公开内容" },
+    ] } }))) as unknown as typeof fetch,
+  });
+
+  assert.deepEqual(outcome.results, [
+    { title: "脚本链接", url: "", snippet: "仍可作为文字线索", content: "" },
+    { title: "公开链接", url: "https://example.com/patent", snippet: "", content: "公开内容" },
+  ]);
+});
+
 test("anySearch never surfaces a 402 message (it may carry credentials)", async () => {
   const outcome = await anySearch(search, { query: "x" }, {
     fetchImpl: (async () => new Response(JSON.stringify({ code: -1, message: "username=u\npassword=p\napi_key=k", request_id: "r" }), { status: 402 })) as unknown as typeof fetch,
@@ -69,6 +86,20 @@ test("anyExtract refuses private URLs without calling upstream", async () => {
   });
   assert.equal(called, false);
   assert.equal(outcome.ok, false);
+});
+
+test("anyExtract ignores an unsafe canonical URL from upstream", async () => {
+  const target = "https://example.com/patent";
+  const outcome = await anyExtract(search, target, {
+    fetchImpl: (async () => new Response(JSON.stringify({ code: 0, data: {
+      url: "http://127.0.0.1/admin",
+      title: "公开页面",
+      content: "正文",
+    } }))) as unknown as typeof fetch,
+  });
+
+  assert.equal(outcome.ok, true);
+  assert.equal(outcome.url, target);
 });
 
 test("agent searches, feeds fenced results back, and cites sources", async () => {
