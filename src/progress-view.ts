@@ -6,8 +6,8 @@
  */
 import { formatElapsed } from "./run-progress.ts";
 import type { ProgressStage, RunProgress, StageStatus } from "./run-progress.ts";
-import { isAbortError, packageProgressText } from "./export-package.ts";
-import type { PackageProgress } from "./export-package.ts";
+import { isAbortError, packageProgressText } from "./package-progress.ts";
+import type { PackageProgress } from "./package-progress.ts";
 
 /** 连续这么久没有新的进度记录时提示：撰写长文本时模型可能连续工作几分钟。 */
 export const STALL_MS = 90_000;
