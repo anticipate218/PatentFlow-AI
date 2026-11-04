@@ -53,6 +53,8 @@ node scripts/live-pipeline.mjs
 | AGENT_PER_HOUR | 30 | 单 IP 的模型相关请求小时级限流 |
 | TOOLS_PER_HOUR | 120 | 单 IP 的独立检索相关请求小时级限流 |
 | MAX_OUTPUT_TOKENS | 32000 | 每次模型请求的输出 token 上限 |
+| MAX_BODY_BYTES | 2000000 | 单个 API 请求体的字节上限，超出返回 413；邀请码表单另限 16384 字节 |
+| SESSION_DAYS | 7 | 公告/邀请会话 Cookie 有效天数，取值限制在 1–30 |
 
 - 日配额由一个固定名称的 Durable Object 事务更新，按北京时间 00:00 重置；普通刷新、换 Cookie、换 Worker isolate 或重启不会重置它。
 - 每次实际使用共享 Key 发出的上游请求都计数，包括失败、重试及 Agent 内部的模型/检索工具调用。一键生成不是只消耗一次。

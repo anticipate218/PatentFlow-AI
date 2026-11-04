@@ -18,3 +18,9 @@ test('documented public quota defaults match the deploy configuration', () => {
   const banner = fs.readFileSync('docs/assets/readme-banner.svg', 'utf8');
   assert.ok(banner.includes('PatentFlow AI')); assert.doesNotMatch(banner, /<script|onload=/i);
 });
+test('every wrangler.jsonc var is documented with its default in the deploy guide', () => {
+  const config = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8').replace(/^\s*\/\/.*$/gm, ''));
+  const guide = fs.readFileSync('docs/cloudflare-deploy.md', 'utf8');
+  const rows = new Map([...guide.matchAll(/^\|\s*([A-Z][A-Z0-9_]+)\s*\|\s*([^|]+?)\s*\|/gm)].map(([, name, value]) => [name, value]));
+  for (const [name, value] of Object.entries(config.vars)) assert.equal(rows.get(name), value, name);
+});
