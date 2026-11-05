@@ -3,11 +3,11 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { access, mkdir, writeFile } from "node:fs/promises";
-import net from "node:net";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { NOTICE_VERSION } from '../src/site-info.ts';
+import { assertPortFree, waitForPortsFree } from './worker-ports.mjs';
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const workspace = path.join(root, ".tmp-library", "worker-mock");
@@ -54,14 +54,6 @@ const childEnv = {
   CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "false",
   CLOUDFLARE_INCLUDE_PROCESS_ENV: "false",
 };
-
-async function assertPortFree(port) {
-  await new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.once("error", () => reject(new Error(`Port ${port} is occupied; its owner was not touched.`)));
-    server.listen(port, "127.0.0.1", () => server.close(resolve));
-  });
-}
 
 function launch(label, args, extraEnv = {}) {
   shutdown.signal.throwIfAborted();
@@ -197,7 +189,7 @@ async function run() {
   console.log("PASS mock upstream refuses missing authentication");
 
   await stop(worker);
-  await Promise.all([8877, inspectorPort].map(assertPortFree));
+  await waitForPortsFree([8877, inspectorPort], { signal: shutdown.signal });
   const noKeyWorker = await startWorker(noKeys);
   const noKeyHeaders = await login();
   const before = await (await request(mockBase + "/__seen")).json();
@@ -214,7 +206,7 @@ async function run() {
   assert.equal(after.length, before.length, "missing-key routes must not call upstream");
   console.log("PASS missing-key routes made no upstream requests");
   await stop(noKeyWorker);
-  await Promise.all([8877, inspectorPort].map(assertPortFree));
+  await waitForPortsFree([8877, inspectorPort], { signal: shutdown.signal });
   const publicConfig = await configure('public', { ...vars, ACCESS_MODE: 'public', ACCESS_CODES: '', PUBLIC_DAILY_MODEL_CALLS: '1', PUBLIC_DAILY_SEARCH_CALLS: '1', AGENT_PER_HOUR: '100' });
   const publicWorker = await startWorker(publicConfig);
   const landing = await request(base + '/'); const landingText = await landing.text();
@@ -238,7 +230,7 @@ async function run() {
   assert.equal((await request(base + '/', { headers: publicHeaders })).status, 200);
   console.log('PASS exhausted shared quota does not block page access');
   await stop(publicWorker);
-  await Promise.all([8877, inspectorPort].map(assertPortFree));
+  await waitForPortsFree([8877, inspectorPort], { signal: shutdown.signal });
   await startWorker(publicConfig);
   const afterRestart = await request(base + '/api/chat', { method: 'POST', headers: publicHeaders, body: JSON.stringify({ messages: [{ role: 'user', content: 'restart cannot reset usage' }] }) });
   const restartDenied = await afterRestart.json(); assert.equal(restartDenied.ok, false); assert.match(restartDenied.detail, /今日共享模型/);
