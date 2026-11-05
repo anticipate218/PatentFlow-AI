@@ -166,10 +166,12 @@ async function readDocx(data: ArrayBuffer): Promise<string> {
 
 async function readPptx(data: ArrayBuffer): Promise<string> {
   const files = await readZip(data, (name) => /^ppt\/slides\/slide\d+\.xml$/.test(name));
-  const slides = [...files.entries()]
+  let slides = [...files.entries()]
     .map(([name, xml]) => ({ no: Number(/slide(\d+)\.xml$/.exec(name)?.[1] ?? 0), lines: slideText(utf8.decode(xml)) }))
     .sort((a, b) => a.no - b.no);
   if (!slides.length) throw new Error("no slides");
+  // Page labels alone are not extracted evidence from image-only slides.
+  slides = slides.filter((slide) => slide.lines.some((line) => line.trim()));
   return slides.map((slide) => [`【第 ${slide.no} 页】`, ...slide.lines].join("\n")).join("\n\n");
 }
 

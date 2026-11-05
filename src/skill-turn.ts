@@ -144,7 +144,7 @@ export function createTopic(text: string): string {
     return topic.length >= 2 && !/^(?:完整|全套|全部|详细|具体|发明|专利|发明专利)+$/.test(topic) ? topic.slice(0, 80) : "";
   };
   // Read an explicitly named subject before interpreting generic words such as “完整专利”.
-  const directed = /(?:^|[。！？；\n])\s*(?:请)?(?:围绕|针对|主题[：:]|题目[：:]|关于)\s*([^，。！？；\n]{2,80})/.exec(value);
+  const directed = /(?:^|[。！？；\n])\s*(?:请)?(?:(?:选择|选定|确定|改为|更换|采用)\s*)?(?:围绕|针对|主题\s*[：:]|题目\s*[：:]|发明名称\s*[：:]|关于)\s*([^，。！？；\n]{2,80})/.exec(value);
   if (directed) {
     const topic = clean(directed[1]);
     if (topic) return topic;

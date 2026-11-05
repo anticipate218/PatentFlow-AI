@@ -30,6 +30,7 @@ import { GITHUB_MARK_PATH, REPOSITORY_URL } from './site-info.ts';
 
 // docx (and the export pipeline built on it) is several MB of source: load it only when the user actually exports.
 const PackageCard = lazy(() => import("./package-card.tsx").then((mod) => ({ default: mod.PackageCard })));
+const DraftDetailPanel = lazy(() => import("./draft-detail-panel.tsx").then(mod => ({default:mod.DraftDetailPanel})));
 const downloadDisclosure: typeof ExportDocx.downloadDisclosure = async (...args) => (await import("./export-docx.ts")).downloadDisclosure(...args);
 
 type PaneId = DockTab | "files" | "memory";
@@ -951,13 +952,14 @@ export function DshFrame() {
                   <pre>还没有资料。把文件拖到输入框即可（支持 PDF、Word、PPT、Excel、图片等）。</pre>
                 )
               ) : null}
-              {current && pane === "claims" ? (current.claims.length ? current.claims.map((claim) => <p key={claim.id}>{claim.no}. {claim.text}</p>) : <p className="empty-copy">还没有权利要求。</p>) : null}
-              {current && pane === "chart" ? <ClaimChart patentCase={current} /> : null}
+              {current?.inventionDraft?.text && ['claims','chart','figures','review','diff'].includes(pane) ? <Suspense fallback={<p>正在读取当前申请稿…</p>}><DraftDetailPanel draft={current.inventionDraft} title={current.title} pane={pane}/></Suspense> : null}
+              {current && !current.inventionDraft?.text && pane === "claims" ? (current.claims.length ? current.claims.map((claim) => <p key={claim.id}>{claim.no}. {claim.text}</p>) : <p className="empty-copy">还没有权利要求。</p>) : null}
+              {current && !current.inventionDraft?.text && pane === "chart" ? <ClaimChart patentCase={current} /> : null}
               {current && pane === "files" ? (current.inventionDraft?.text ? <Suspense fallback={<p className="empty-copy">正在载入申请文件…</p>}><PackageCard patentCase={current} compact busy={busy} onRevise={(instruction) => submit({ text: instruction, intent: "revise" })} /></Suspense> : <p className="empty-copy">还没有申请文件。在输入框发送 /发明稿，一句话或一份资料就能生成全套文件。</p>) : null}
               {current && pane === "memory" ? <MemoryPanel patentCase={current} /> : null}
-              {current && pane === "figures" ? (current.figures.length ? current.figures.map((figure) => <p key={figure.id}>图{figure.no} {figure.label}</p>) : <p className="empty-copy">还没有附图。</p>) : null}
-              {current && pane === "review" ? (current.issues.length ? current.issues.map((issue) => <p key={issue.id}>{issue.title}：{issue.detail}</p>) : <p className="empty-copy">自检没有留下问题。</p>) : null}
-              {current && pane === "diff" ? <p>{current.versions.length < 2 ? "接受一次修改后会出现差异。" : current.versions.map((version) => version.label).join(" → ")}</p> : null}
+              {current && !current.inventionDraft?.text && pane === "figures" ? (current.figures.length ? current.figures.map((figure) => <p key={figure.id}>图{figure.no} {figure.label}</p>) : <p className="empty-copy">还没有附图。</p>) : null}
+              {current && !current.inventionDraft?.text && pane === "review" ? (current.issues.length ? current.issues.map((issue) => <p key={issue.id}>{issue.title}：{issue.detail}</p>) : <p className="empty-copy">自检没有留下问题。</p>) : null}
+              {current && !current.inventionDraft?.text && pane === "diff" ? <p>{current.versions.length < 2 ? "接受一次修改后会出现差异。" : current.versions.map((version) => version.label).join(" → ")}</p> : null}
               {!current ? <p>先开始一条对话。</p> : null}
             </div>
           )}

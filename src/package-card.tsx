@@ -166,7 +166,7 @@ export function PackageCard({
         <div>
           <h2>发明专利申请文件（初稿）</h2>
           <p>
-            《{listing.title}》 · {chars} 字 · {draft.claimCount} 项权利要求 · 自检 {draft.score} 分 · 待补充事实 {draft.pendingMarks} 处
+            《{listing.title}》 · {chars} 字 · {draft.claimCount} 项权利要求 · 自检 {draft.score} 分 · 正文待补充标记 {draft.pendingMarks} 处 · 待核验事项 {draft.pending?.length ?? 0} 项
             {revisions.length ? ` · 已修改 ${revisions.length} 次` : ""}
           </p>
         </div>

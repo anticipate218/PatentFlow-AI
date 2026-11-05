@@ -24,7 +24,7 @@ import { detectDomain, detectionNote, domainGuide } from "./patent-library.ts";
 import type { DraftAudit, DraftShape, PriorArtRef } from "./invention-draft.ts";
 import { draftQueries, gatherPriorArt, priorArtTrace } from "./prior-art.ts";
 import type { LeadSearchResult, PageResult } from "./prior-art.ts";
-import { buildChatMessages, clipText, packMaterials, titleFromMaterials } from "./skill-turn.ts";
+import { buildChatMessages, clipText, createTopic, packMaterials, titleFromMaterials } from "./skill-turn.ts";
 import type { PackedMaterial } from "./skill-turn.ts";
 import { isDraftTailJson, stripDraftJsonTail } from "./figure-spec.ts";
 import { formalCheck, parseApplication } from "./cnipa-format.ts";
@@ -319,7 +319,7 @@ export async function runDraftTurn(input: DraftTurnInput, deps: DraftDeps): Prom
   trace(detectionNote(detection));
 
   // ① prior art
-  const topic = input.chosenPoint?.title || input.pursued?.[0] || titleFromMaterials(input.materials, corpus);
+  const topic = createTopic(input.userText) || input.chosenPoint?.title || input.pursued?.[0] || titleFromMaterials(input.materials, corpus);
   const queries = draftQueries(topic, input.chosenPoint?.feature);
   const priorArt = input.priorArt?.length
     ? input.priorArt

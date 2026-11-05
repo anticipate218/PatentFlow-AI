@@ -372,7 +372,15 @@ export async function runAutoPatent(input: AutoInput, deps: AutoDeps): Promise<A
   const ownMaterial = hasOwnMaterial(materials);
   let chosen = pickExistingIdea(input.ideas);
   let outline = materials.some((item) => item.name === OUTLINE_MATERIAL_NAME && item.text.trim());
-  const topic = createTopic(parseSlash(input.userText).rest || input.userText) || historyTopic(input.history);
+  const requestedTopic = createTopic(parseSlash(input.userText).rest || input.userText);
+  const topic = requestedTopic || historyTopic(input.history);
+  // A reference file is evidence, not the user's selected invention title.
+  if (ownMaterial && topic) {
+    chosen = chosen?.title === topic ? chosen : { title: topic, problem: "", feature: "", effect: "", pending: "" };
+    if (requestedTopic) {
+      materials = materials.filter(item => item.name !== NOVELTY_MATERIAL_NAME || item.text.includes(requestedTopic));
+    }
+  }
 
   trace(
     `${AUTO_TRACE_PREFIX}：${ownMaterial ? "按你给的材料" : chosen ? `沿用已有题目「${chosen.title}」` : "检索选题 → 自动采用推荐题目"} → 查新对比 → ${ownMaterial || outline ? "" : "设计大纲 → "}写完整申请文件 → 生成 Word。全程不再提问，未知数值用标注“${SIMULATED_MARK}”的模拟值。`,
@@ -434,7 +442,7 @@ export async function runAutoPatent(input: AutoInput, deps: AutoDeps): Promise<A
   //     风险为中或高时按未公开的技术手段强化方案（或换下一个候选题目）后复查。发明人自带交底材料时只出报告和改进建议，不替换方案。
   let noveltyArt: PriorArtRef[] = [];
   const corpusTitle = ownMaterial ? titleFromMaterials(materials, materials.map((item) => item.text).join("\n")) : "";
-  const noveltyTarget: AutoPoint | undefined = chosen ?? (corpusTitle || topic ? { title: corpusTitle || topic, problem: "", feature: "", effect: "", pending: "" } : undefined);
+  const noveltyTarget: AutoPoint | undefined = chosen ?? (topic || corpusTitle ? { title: topic || corpusTitle, problem: "", feature: "", effect: "", pending: "" } : undefined);
   if (noveltyTarget?.title.trim() && !materials.some((item) => item.name === NOVELTY_MATERIAL_NAME && item.text.trim())) {
     trace("①½ 查新对比：按题目、核心特征和技术问题多角度检索中国专利，逐项比对技术特征、评估新颖性和创造性风险；风险高时自动强化方案或换候选题目后复查，确认有创新空间再写全文。");
     const targetTitle = noveltyTarget.title;
@@ -447,7 +455,7 @@ export async function runAutoPatent(input: AutoInput, deps: AutoDeps): Promise<A
     if (novelty.report) {
       const saved: PackedMaterial = { name: NOVELTY_MATERIAL_NAME, kind: "text", text: novelty.report };
       materials = [...materials.filter((item) => item.name !== NOVELTY_MATERIAL_NAME), saved];
-      dispatch({ type: "attach-materials", caseId, materials: [saved] });
+      dispatch({ type: "attach-materials", caseId, materials: [saved], replaceNamed: true });
     }
     if (!ownMaterial && novelty.changed) {
       chosen = novelty.point;
@@ -460,7 +468,7 @@ export async function runAutoPatent(input: AutoInput, deps: AutoDeps): Promise<A
   if (chosen && !ownMaterial) {
     const picked = topicMaterial(chosen, selection);
     materials = [...materials.filter((item) => item.name !== AUTO_TOPIC_MATERIAL_NAME), picked];
-    dispatch({ type: "attach-materials", caseId, materials: [picked] });
+    dispatch({ type: "attach-materials", caseId, materials: [picked], replaceNamed: true });
   }
 
   // ② 大纲
@@ -474,7 +482,7 @@ export async function runAutoPatent(input: AutoInput, deps: AutoDeps): Promise<A
       say(text);
       const saved: PackedMaterial = { name: OUTLINE_MATERIAL_NAME, kind: "text", text };
       materials = [...materials.filter((item) => item.name !== OUTLINE_MATERIAL_NAME), saved];
-      dispatch({ type: "attach-materials", caseId, materials: [saved] });
+      dispatch({ type: "attach-materials", caseId, materials: [saved], replaceNamed: true });
       outline = true;
       trace(`大纲已保存为《${OUTLINE_MATERIAL_NAME}》，接着按大纲写全文。`);
     } else {

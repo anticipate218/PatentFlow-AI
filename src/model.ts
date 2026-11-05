@@ -105,6 +105,8 @@ export interface ChatMessage {
 
 export interface CaseMaterial {
   id: string;
+  /** Set only for pipeline artifacts; uploaded files must not be replaced by name. */
+  generated?: boolean;
   name: string;
   kind: "pdf" | "text";
   text: string;
@@ -307,7 +309,7 @@ export type Action =
   | { type: "open-case"; id: string }
   | { type: "focus-case"; id: string }
   | { type: "create-case"; title: string; text: string; fileName: string; skill?: boolean; id?: string; materials?: Array<{ name: string; kind: "pdf" | "text"; text: string }> }
-  | { type: "attach-materials"; caseId: string; materials: Array<{ name: string; kind: "pdf" | "text"; text: string }> }
+  | { type: "attach-materials"; caseId: string; materials: Array<{ name: string; kind: "pdf" | "text"; text: string }>; replaceNamed?: boolean }
   | { type: "merge-ideas"; caseId: string; ideas: Array<{ title: string; problem: string; feature: string; effect: string; pending: string }> }
   | { type: "pursue-idea"; caseId: string; title: string }
   | { type: "idea-status"; caseId: string; ideaId: string; status: PatentIdea["status"] }
@@ -995,11 +997,14 @@ export function reduce(state: Persisted, action: Action): Persisted {
       }));
     case "attach-materials":
       return withCase(state, action.caseId, (patentCase) => {
+        const replacedNames = new Set(action.replaceNamed ? action.materials.filter(item => item.text.trim()).map(item => item.name) : []);
+        const existing = patentCase.materials.filter(item => !item.generated || !replacedNames.has(item.name));
         const incoming = action.materials
           .filter((item) => item.text.trim())
-          .filter((item) => !patentCase.materials.some((current) => current.name === item.name && current.text === item.text.trim()))
+          .filter((item) => !existing.some((current) => current.name === item.name && current.text === item.text.trim()))
           .map((item) => ({
             id: stamp("mat"),
+            generated: action.replaceNamed || undefined,
             name: item.name,
             kind: item.kind,
             text: item.text.trim(),
@@ -1007,7 +1012,7 @@ export function reduce(state: Persisted, action: Action): Persisted {
             at: new Date().toISOString(),
           }));
         if (incoming.length === 0) return patentCase;
-        const materials = [...patentCase.materials, ...incoming];
+        const materials = [...existing, ...incoming];
         return {
           ...patentCase,
           materials,
@@ -1018,7 +1023,7 @@ export function reduce(state: Persisted, action: Action): Persisted {
             {
               id: stamp("audit"),
               at: new Date().toISOString(),
-              action: "附加材料",
+              action: action.replaceNamed ? "更新生成材料" : "附加材料",
               detail: incoming.map((item) => `《${item.name}》`).join("、"),
             },
           ],

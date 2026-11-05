@@ -11,7 +11,7 @@ import { CcSwitchShelf } from "./model-menu.tsx";
 import { PersonalModelsPanel } from './personal-models-panel.tsx';
 import { patentWebQuery, patentPageLeads } from './patent-search-scope.ts';
 import { VendorMark } from "./vendor-mark.tsx";
-import { readUserFile } from "./read-user-file.ts";
+import { readUserFile, UPLOAD_ACCEPT, UPLOAD_HINT } from "./read-user-file.ts";
 import { useStore } from "./store.tsx";
 import { markKnowledgeBack, takeKnowledgeBack } from "./ui-nav.ts";
 import { ClaimChart, formatTime } from "./widgets.tsx";
@@ -64,6 +64,8 @@ export function KnowledgePage() {
   const { state, dispatch, setView, notify } = useStore();
   const [bucket, setBucket] = useState<"mine" | "private" | "demo" | "law" | "library">("mine");
   const [picked, setPicked] = useState<string[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [uploadResult, setUploadResult] = useState("");
   const selected = PUBLICATIONS.find((item) => item.id === state.selectedPubId) ?? PUBLICATIONS[0];
   const privateCase = state.cases.find((item) => item.id === state.activeCaseId) ?? state.cases[0];
   const mine = state.knowledge ?? [];
@@ -113,28 +115,39 @@ export function KnowledgePage() {
         {bucket === "mine" ? (
           <>
             <label className="btn primary file-btn knowledge-upload">
-              上传到知识库
+              {importing ? "正在读取材料…" : "上传到知识库"}
               <input
                 type="file"
                 multiple
-                accept=".pdf,.txt,.md,.markdown,application/pdf,text/plain"
+                accept={UPLOAD_ACCEPT}
+                aria-label="上传到知识库"
+                disabled={importing}
                 onChange={(event) => {
                   const files = event.target.files;
                   if (!files) return;
+                  setImporting(true);
+                  setUploadResult("");
                   void Promise.all(Array.from(files).map((file) => readUserFile(file))).then((results) => {
+                    const errors: string[] = [];
+                    let imported = 0;
                     results.forEach((result) => {
                       if (!result.ok) {
-                        notify(result.reason);
+                        errors.push(result.reason);
                         return;
                       }
+                      imported += 1;
                       dispatch({ type: "add-knowledge", name: result.file.name, kind: result.file.kind, text: result.file.text });
                     });
-                  });
+                    const summary = `已加入 ${imported} 份材料。${errors.join("；")}`;
+                    setUploadResult(summary);
+                    notify(summary);
+                  }).catch(() => setUploadResult("读取未完成，请重试；已有知识库材料没有改动。")).finally(() => setImporting(false));
                   event.target.value = "";
                 }}
               />
             </label>
-            {mine.length === 0 ? <p className="empty-copy">还没有上传材料。PDF、txt 和 md 可以留在这里，再一起载入对话。</p> : null}
+            {uploadResult ? <p className="fine" role="status">{uploadResult}</p> : null}
+            {mine.length === 0 ? <p className="empty-copy">还没有上传材料。支持{UPLOAD_HINT}，可保存在这里再载入对话。</p> : null}
             {mine.map((item) => (
               <label key={item.id} className={picked.includes(item.id) ? "result selected check-result" : "result check-result"}>
                 <input type="checkbox" checked={picked.includes(item.id)} onChange={() => toggle(item.id)} />
