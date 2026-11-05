@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildPackageZip, isAbortError, listPackage, packageProgressText, preparePackageZip } from "./export-package.ts";
-import type { PackageProgress } from "./export-package.ts";
+import { buildPackageZip, listPackage, preparePackageZip } from "./export-package.ts";
+import { isAbortError, packageProgressText } from "./package-progress.ts";
+import type { PackageProgress } from "./package-progress.ts";
 import { listZip } from "./zip.ts";
 
 const DRAFT = [

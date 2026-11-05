@@ -4,7 +4,7 @@ import type { PatentCase } from "./model.ts";
 import { downloadPackageFile, downloadPackageZip, listPackage } from "./export-package.ts";
 import { createJobLock, zipDoneState, zipStoppedState, zipView, ZIP_TIMEOUT_MS } from "./progress-view.ts";
 import type { ZipState } from "./progress-view.ts";
-import type { PackageProgress } from "./export-package.ts";
+import type { PackageProgress } from "./package-progress.ts";
 import type { PackageFile } from "./export-package.ts";
 import { REVISE_QUICK_ACTIONS } from "./draft-revise.ts";
 import { useStore } from "./store.tsx";
