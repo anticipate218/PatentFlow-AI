@@ -50,6 +50,7 @@ export const INVENTION_SYSTEM = `你是资深中国专利代理师，正在为�
 - 《专利法》第26条第3款：说明书应当清楚、完整，使所属技术领域的技术人员能够实现。
 - 《专利法》第26条第4款：权利要求书应当以说明书为依据，清楚、简要地限定保护范围。
 - 《专利审查指南》关于权利要求的要求：独立权利要求写明前序部分和特征部分（"其特征在于"），从属权利要求只引用在前的权利要求，权利要求中不得使用"例如""优选""最好是""尤其是""大约""左右"等使保护范围不清的用语，也不得写"如图X所示"。
+- 《专利审查指南》关于从属权利要求的撰写规定：引用部分写明被引用权利要求的编号并重述其主题名称（"根据权利要求1所述的……装置"）；引用两项以上权利要求时只能择一引用（"根据权利要求1或2所述的……""根据权利要求1至3中任一项所述的……"），且不得被另一项多项从属权利要求引用；从属权利要求写在所从属的独立权利要求之后、下一项独立权利要求之前。权利要求中"所述××"指代的特征必须已在本项前文或所引用的权利要求中出现，名称前后一致，否则缺乏引用基础。
 
 【内部工作流（按顺序思考，不要把思考过程原样输出）】
 1. 理解方案：从材料中提炼技术问题、完整技术手段（输入→处理步骤→输出）、关键参数和可验证的技术效果。
@@ -368,6 +369,21 @@ function sectionOf(sections: Map<string, string>, name: string): string {
   return "";
 }
 
+/** “权利要求”后连写的编号：单个、列举（“1、2或3”“1和2”）和范围（“1至3”“1-3”“1～3”“1至权利要求3”）。 */
+const CLAIM_REF_GROUP = /权利要求\s*(\d{1,3}(?:\s*(?:[-—–~～至到]|、|,|或者|或|以及|和|及|与)\s*(?:权利要求\s*)?\d{1,3})*)/g;
+
+/** 一段文字中“权利要求……”引用的全部编号，列举和范围都展开，例如“权利要求1、3或5至7”得到 1、3、5、6、7。 */
+export function claimRefNumbers(text: string): number[] {
+  const refs = new Set<number>();
+  for (const match of text.matchAll(CLAIM_REF_GROUP)) {
+    for (const item of match[1].replace(/权利要求\s*/g, "").split(/\s*(?:、|,|或者|或|以及|和|及|与)\s*/)) {
+      const [start, end = start] = item.split(/\s*[-—–~～至到]\s*/).map(Number);
+      for (let value = start; value <= end && value - start < 50; value += 1) refs.add(value);
+    }
+  }
+  return [...refs].sort((a, b) => a - b);
+}
+
 export function parseClaims(body: string): ParsedClaim[] {
   const claims: ParsedClaim[] = [];
   let current: ParsedClaim | null = null;
@@ -382,13 +398,7 @@ export function parseClaims(body: string): ParsedClaim[] {
   }
   if (current) claims.push(current);
   for (const claim of claims) {
-    const refs = new Set<number>();
-    for (const match of claim.text.matchAll(/权利要求\s*(\d{1,3})(?:\s*[-至到~]\s*(\d{1,3}))?/g)) {
-      const start = Number(match[1]);
-      const end = match[2] ? Number(match[2]) : start;
-      for (let value = start; value <= end && value - start < 50; value += 1) refs.add(value);
-    }
-    claim.refs = [...refs].sort((a, b) => a - b);
+    claim.refs = claimRefNumbers(claim.text);
     claim.independent = claim.refs.length === 0 || /^一种/.test(claim.text);
   }
   return claims;

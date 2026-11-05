@@ -7,7 +7,7 @@
  * Word 导出（export-docx.ts）和知识库样例都复用这里的结构。
  * 检查只覆盖机器能判断的形式问题，不代表国家知识产权局会受理，也不替代专利代理师审核。
  */
-import { parseClaims } from "./invention-draft.ts";
+import { claimRefNumbers, parseClaims } from "./invention-draft.ts";
 import { auditFormulas, groupFormulaIssues } from "./formula-audit.ts";
 import type { FormulaReport, FormulaSource } from "./formula-audit.ts";
 import { joinDisplayBlocks, parseDisplayLine, plainParagraph } from "./formula.ts";
@@ -404,6 +404,331 @@ function listNos(values: number[]): string {
   return values.map((value) => `第 ${value} 条`).join("、");
 }
 
+// ---------------------------------------------------------------------------
+// 从属权利要求的撰写规定（《专利审查指南》第二部分第二章 3.3.2 节）与“所述”特征的引用基础。
+// 只检查机器能可靠判断的写法；主题名称和引用基础按字面比对，只给“需注意”。
+
+function claimText(claim: AppClaim): string {
+  return claim.lines.join("");
+}
+
+/** 引用部分开头可出现的词：“根据”“如”“在”等，以及“前述”“以上”“任一项”一类不写编号的引用。 */
+const REFERENCE_LEAD = String.raw`^\s*(?:根据|按照|依据|如|在|按)?\s*(?:前面|前述|上述|以上)?\s*(?:任一项|任意一项|任一)?\s*`;
+/** 以引用其他权利要求开头（“根据权利要求1……”“在权利要求1所述的方法中”“根据前面任一项权利要求……”），而不是只在正文中提到。 */
+const LEADS_WITH_REFERENCE = new RegExp(`${REFERENCE_LEAD}权利要求`);
+const REFERENCE_PART = new RegExp(`${REFERENCE_LEAD}(权利要求[^，,：:；;。]*?)所(?:述|限定)的?`);
+/** 少数译文没有“所述”：“根据权利要求1的方法”。 */
+const REFERENCE_PART_PLAIN = new RegExp(`${REFERENCE_LEAD}(权利要求[^，,：:；;。]*?)的`);
+/** “所述”紧跟在引用部分之后（“权利要求1或2所述”“权利要求1至3中任一项所述”“前述权利要求中任一项所述”），不指代技术特征。 */
+const REFERENCE_BEFORE_SUOSHU = /权利要求(?:[\d\s、,或者和及与以至到~～—–-]|权利要求)*(?:中的?)?(?:任一项|任意一项|任一|任意一|之一)?$/;
+const ALTERNATIVE_REF = /或|任一|任意一|之一/;
+const CUMULATIVE_REF = /\d\s*(?:和|以及|及|与|并且)\s*(?:权利要求\s*)?\d/;
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** 开头的引用部分，例如“根据权利要求1或2所述的”“如权利要求1至3中的任意一项所述的”。refs 为从“权利要求”起的引用原文。 */
+function referencePart(text: string): { whole: string; refs: string } | null {
+  const hit = REFERENCE_PART.exec(text) ?? REFERENCE_PART_PLAIN.exec(text);
+  return hit ? { whole: hit[0], refs: hit[1] } : null;
+}
+
+/** 主题名称：去掉引用部分、“一种”和附图标记后，到第一个逗号或“包括”为止；保留括号中的字母缩写（“起搏器(LCP)”）。 */
+function claimSubject(text: string, part: { whole: string } | null): string {
+  const flat = (part ? text.slice(part.whole.length) : text)
+    .replace(/[（(]\s*\d[^（()）]*[）)]/g, "")
+    .replace(/\s+/g, "")
+    // 独立权利要求也可写作“一种权利要求1所述的涂料的施用方法”
+    .replace(/^一种/, "")
+    .replace(/^(?:(?:根据|按照|依据|如)?权利要求[^，,：:；;。]*?所(?:述|限定)的?)?(?:一种)?/, "");
+  // 用途权利要求“……化合物在制备治疗××的药物中的用途”：主题到“用途”为止，即使中间有逗号
+  const use = /^[^，,；;。]*?在制备[^；;。]*?中的(?:用途|应用)/.exec(flat)?.[0];
+  if (use) return use;
+  // 不在冒号处截断：“式(I)的化合物：或其药学上可接受的盐”的冒号后是结构式
+  const stop = flat.slice(1).search(/[，,；;。]|还?包括|还?包含|其特征在于/);
+  return (stop >= 0 ? flat.slice(0, stop + 1) : flat).replace(/中$/, "");
+}
+
+type SubjectKind = "product" | "method" | "use";
+
+/** 主题名称的类别；“一种应用于雨水井的截污装置”以“装置”结尾，是产品。 */
+function subjectKind(subject: string): SubjectKind {
+  if (/(?:用途|应用|使用)$/.test(subject)) return "use";
+  return /(?:方法|工艺|流程)$/.test(subject) ? "method" : "product";
+}
+
+/** a 中含有 b 的某个连续 size 字片段：“……材料应用于污水处理”与“……材料的制备方法”说的是同一对象。 */
+function sharesTerm(a: string, b: string, size = 4): boolean {
+  for (let start = 0; start + size <= b.length; start += 1) if (a.includes(b.slice(start, start + size))) return true;
+  return false;
+}
+
+/** 比较主题名称时去掉“的”：“涂料的施用方法”与“涂料施用方法”相同。 */
+function subjectKey(subject: string): string {
+  return subject.replace(/的/g, "");
+}
+
+/** 并列的主题分开比较：“化合物或其药学上可接受的盐”分为“化合物”“其药学上可接受盐”。 */
+function subjectPieces(subject: string): string[] {
+  return subjectKey(subject)
+    .split(/或者|或|以及|及|和|与/)
+    .map((piece) => piece.replace(/^[^一-龥A-Za-z\d]+|[^一-龥A-Za-z\d]+$/g, ""))
+    .filter(Boolean);
+}
+
+/**
+ * 引用在前权利要求的另一类权利要求，例如“根据权利要求1所述的涂料的制备方法”“……化合物在制备药物中的用途”：
+ * 类别（产品、方法、用途）与被引用的权利要求不同，名称中又含有被引用主题的中心词。实质上是另一项独立权利要求。
+ */
+function derivedCategory(own: { subject: string; kind: SubjectKind }, parent: { subject: string; kind: SubjectKind }): boolean {
+  if (!own.subject || !parent.subject || own.kind === parent.kind) return false;
+  const key = subjectKey(own.subject);
+  return subjectPieces(parent.subject).some((piece) => key.includes(piece.slice(-2)) || sharesTerm(key, piece));
+}
+
+/** 重述的主题名称与被引用的一致：允许简称（“所述的方法”）和修饰语不同，中心词（末两字）须相同。 */
+function sameSubject(own: string, parent: string): boolean {
+  return subjectPieces(own).some((a) => subjectPieces(parent).some((b) => a.endsWith(b) || b.endsWith(a) || a.slice(-2) === b.slice(-2)));
+}
+
+interface ClaimNode {
+  claim: AppClaim;
+  /** 引用的在前权利要求：从属权利要求取引用部分，独立权利要求取其中提到的（“包括权利要求1所述的装置”）。 */
+  parents: number[];
+  subject: string;
+  kind: SubjectKind;
+  /** 独立权利要求，或引用在前权利要求的另一类权利要求：其后的从属权利要求以它为首。 */
+  head: boolean;
+  /** 引用两项以上权利要求的多项从属权利要求。 */
+  multiple: boolean;
+  /** 引用部分原文（如“权利要求1或2”），判断是否择一引用。 */
+  reference: string;
+  /** 引用部分没有重述主题名称（“根据权利要求1，其特征在于”）。 */
+  unnamed: boolean;
+  /** 引用部分没有写编号（“根据前述权利要求中任一项所述的”）。 */
+  unnumbered: boolean;
+}
+
+function claimTree(claims: AppClaim[]): Map<number, ClaimNode> {
+  const nodes = new Map<number, ClaimNode>();
+  for (const claim of claims) {
+    const text = claimText(claim);
+    // 只在正文提到其他权利要求的（“空调器，……实现如权利要求1至34中任一项所述方法的步骤”）按独立权利要求处理
+    const leads = !/^\s*一种/.test(text) && LEADS_WITH_REFERENCE.test(text);
+    const part = leads ? referencePart(text) : null;
+    const unnamed = leads && !part;
+    const numbered = part ? claimRefNumbers(part.refs) : [];
+    // “根据前述权利要求中任一项所述的”不写编号：引用前面各项
+    const cited = !leads ? claim.refs : numbered.length ? numbered : claim.refs.length ? claim.refs : [...nodes.keys()];
+    const parents = cited.filter((no) => no < claim.no && nodes.has(no));
+    const subject = unnamed ? "" : claimSubject(text, part);
+    const kind = subjectKind(subject);
+    const head = !leads || parents.some((no) => {
+      const parent = nodes.get(no);
+      return parent !== undefined && derivedCategory({ subject, kind }, parent);
+    });
+    // 择一引用看整个引用部分（“根据前面任一项权利要求所述的”中“任一项”在“权利要求”之前）；
+    // 没有标准引用部分时只看第一个分句，正文里的“或”“2和3个”不影响判断
+    const reference = part?.whole ?? text.split(/[，,：:；;。]/)[0] ?? "";
+    const unnumbered = part !== null && !numbered.length && !claim.refs.length;
+    nodes.set(claim.no, { claim, parents, subject, kind, head, multiple: !head && parents.length >= 2, reference, unnamed, unnumbered });
+  }
+  return nodes;
+}
+
+/** 从属权利要求直接或间接从属的独立权利要求（含另一类权利要求）编号。 */
+function rootsOf(no: number, nodes: Map<number, ClaimNode>, seen = new Set<number>()): Set<number> {
+  const node = nodes.get(no);
+  if (!node || seen.has(no)) return new Set();
+  if (node.head) return new Set([no]);
+  seen.add(no);
+  const roots = new Set<number>();
+  for (const parent of node.parents) for (const root of rootsOf(parent, nodes, seen)) roots.add(root);
+  return roots;
+}
+
+/** 编号列表，连续三项以上写成范围：“3～10、12”。 */
+function compactNos(values: number[]): string {
+  const parts: string[] = [];
+  for (let start = 0; start < values.length; start += 1) {
+    let end = start;
+    while (end + 1 < values.length && values[end + 1] === values[end] + 1) end += 1;
+    parts.push(end - start >= 2 ? `${values[start]}～${values[end]}` : values.slice(start, end + 1).join("、"));
+    start = end;
+  }
+  return parts.join("、");
+}
+
+/** “所述”后不构成特征名称的限定词：各、每个、多个、至少两个、相应等。 */
+const TERM_QUANTIFIER = /^(?:各个?|每一?个?|任一|任意一?个?|全部|所有|多个|若干|至少[一二两三四五六七八九十\d]+个?|[一二两三四五六七八九十\d]+个|相应的?|对应的?)/;
+/** 不检查的“所述”：公式符号、希腊字母、单字母变量、数字、步骤编号和代词。 */
+const TERM_SKIP = /^(?:[$\\\u0370-\u03ff，,。；;：:、\d]|[A-Za-z](?![A-Za-z\d])|步骤|两者|二者|其|该|此)/;
+/** 小写字母开头的多为公式变量（“所述wyi表示……”），不按特征名称检查。 */
+const TERM_VARIABLE = /^[a-z]/;
+/** 介词短语开头的“所述在步骤一的溶液中”：中心词在“的”之后。 */
+const TERM_PREPOSITION = /^(?:在|由|从|对|经|按|将|于|通过|根据|当)[^，,。；;：:、]*?的(.+)$/;
+const ORDINAL = /^第[一二三四五六七八九十\d]+/;
+/** 常紧跟在单字名词后的字（连词、方位词和常见动词）：“所述轴上”“所述垫且”“所述酶选自”中名词只有一个字。 */
+const AFTER_NOUN = new Set([..."与和及或且并的之上下内外中侧端处在为是由被设连固套位沿朝向于具包含选采呈供输接发进使形构分均都也又即则以通用经还可能将把对从至到时后前"]);
+
+/**
+ * 按字面判断“所述××”在前文中有没有在先表述：××开头两个字（单字名词一个字）、“第一××”的序数加一个字、
+ * 字母缩写整体（“所述第一BSR”）出现在前文中，或××所带的附图标记在前文中出现过，即视为有引用基础。
+ */
+function hasAntecedent(term: string, available: string): boolean {
+  // “所述无线检测器(1301)”：同一附图标记前的名称末两字与前文一致（“检测器(1301)”），即为同一部件
+  const signed = /^([^，,。；;：:、（(]{1,12}?)[（(]\s*([A-Za-z0-9]+)\s*[）)]/.exec(term);
+  if (signed && !signed[1].includes("所述")) {
+    if (new RegExp(`${escapeRegExp(signed[1].slice(-2))}\\s*[（(]\\s*${signed[2]}\\s*[）)]`).test(available)) return true;
+  }
+  const ordinal = ORDINAL.exec(term)?.[0] ?? "";
+  const rest = term.slice(ordinal.length);
+  if (ordinal && /^[、，,和及与或]/.test(rest)) return available.includes(ordinal);
+  const latin = /^[A-Za-z][A-Za-z0-9_-]*/.exec(rest)?.[0];
+  if (latin) return available.includes(latin) && available.includes(ordinal);
+  if (ordinal) return available.includes(term.slice(0, ordinal.length + 1));
+  if (available.includes(term.slice(0, 2))) return true;
+  const first = term[0] ?? "";
+  if (AFTER_NOUN.has(term[1] ?? "") || /^.[，,。；;：:、（(\s]/.test(term)) return available.includes(first);
+  // 单字名词后接动词（“以及-垫，所述垫布置在……”）：前文中该字两侧都是分隔，即单独作为名词出现过
+  return new RegExp(`(?:^|[，,。；;：:、（(\\s\\-—和与及或个种的])${escapeRegExp(first)}(?=[，,。；;：:、（(\\s和与及或]|$)`, "m").test(available);
+}
+
+function termPreview(term: string): string {
+  const cut = term.search(/[，,。；;：:、（(\s]/);
+  const head = cut > 0 ? term.slice(0, cut) : term;
+  return head.length > 6 ? `${head.slice(0, 6)}…` : head;
+}
+
+/** “所述××”在本项前文和所引用的权利要求中都找不到在先表述的地方，每项权利要求报第一处。 */
+function antecedentGaps(nodes: Map<number, ClaimNode>): string[] {
+  const all = [...nodes.values()];
+  /** 本项提到的全部在前权利要求（含正文中的“所述系统是根据权利要求3所述的系统”），逐级上溯；“前述权利要求”一类不写编号的引用算前面各项。 */
+  const ancestors = (node: ClaimNode, seen: Set<number>): Set<number> => {
+    const unnumbered = !node.claim.refs.length && /权利要求/.test(claimText(node.claim));
+    for (const no of unnumbered ? all.map((other) => other.claim.no) : node.claim.refs) {
+      const parent = nodes.get(no);
+      if (!parent || no >= node.claim.no || seen.has(no)) continue;
+      seen.add(no);
+      ancestors(parent, seen);
+    }
+    return seen;
+  };
+  const gaps: string[] = [];
+  for (const node of all) {
+    const text = claimText(node.claim);
+    const earlier = [...ancestors(node, new Set())].map((no) => claimText((nodes.get(no) as ClaimNode).claim)).join("\n");
+    for (const match of text.matchAll(/所述的?/g)) {
+      const at = match.index ?? 0;
+      const before = text.slice(0, at);
+      // “根据权利要求1所述的”是引用部分，“如上所述”不指代特征
+      if (REFERENCE_BEFORE_SUOSHU.test(before) || /[上前]$/.test(before)) continue;
+      const term = text.slice(at + match[0].length).replace(TERM_QUANTIFIER, "");
+      if (!term || TERM_SKIP.test(term) || TERM_VARIABLE.test(term)) continue;
+      const available = `${earlier}\n${before}`;
+      if (hasAntecedent(term, available)) continue;
+      const inner = TERM_PREPOSITION.exec(term)?.[1];
+      if (inner && hasAntecedent(inner.replace(TERM_QUANTIFIER, ""), available)) continue;
+      gaps.push(`第 ${node.claim.no} 条“所述${termPreview(term)}”`);
+      break;
+    }
+  }
+  return gaps;
+}
+
+/** 多项从属权利要求、从属权利要求的位置与引用部分、“所述”特征的引用基础。 */
+function claimStructureChecks(claims: AppClaim[]): FormalCheck[] {
+  // 编号不连续或重复时引用关系无法可靠对应，先按“权利要求编号”一项修正
+  if (!claims.every((claim, index) => claim.no === index + 1)) return [];
+  const nodes = claimTree(claims);
+  const all = [...nodes.values()];
+  const dependents = all.filter((node) => !node.head);
+  const checks: FormalCheck[] = [];
+  const add = (id: string, label: string, level: CheckLevel, detail: string) => checks.push({ id, label, level, detail });
+  const nosOf = (list: ClaimNode[]) => listNos(list.map((node) => node.claim.no));
+
+  // 多项从属权利要求只能择一引用（“或”“任一项”），不得用“和”“及”并列引用
+  const multiple = dependents.filter((node) => node.multiple);
+  const cumulative = multiple.filter((node) => !ALTERNATIVE_REF.test(node.reference) && CUMULATIVE_REF.test(node.reference));
+  const unclear = multiple.filter((node) => !ALTERNATIVE_REF.test(node.reference) && !cumulative.includes(node));
+  const unclearNote = unclear.length
+    ? `${nosOf(unclear)}引用两项以上权利要求但没有写明择一关系，建议写成“根据权利要求1或2所述的……”或“根据权利要求1至3中任一项所述的……”。`
+    : "";
+  if (cumulative.length) {
+    add("claim-multiple", "多项从属权利要求择一引用", "error", `${nosOf(cumulative)}用“和”“及”等并列引用两项以上权利要求；多项从属权利要求只能择一引用，例如“根据权利要求1或2所述的……”。${unclearNote}`);
+  } else {
+    add("claim-multiple", "多项从属权利要求择一引用", unclear.length ? "warn" : "ok", unclearNote || (multiple.length ? `${nosOf(multiple)}均为择一引用` : "没有多项从属权利要求"));
+  }
+
+  // 多项从属权利要求不得作为另一项多项从属权利要求的引用基础（指南原文为“在后的多项从属权利要求不得引用在前的多项从属权利要求”，只查直接引用）
+  const stacked = multiple.flatMap((node) => {
+    const bases = node.parents.filter((no) => nodes.get(no)?.multiple);
+    return bases.length ? [`第 ${node.claim.no} 条引用了同为多项从属权利要求的第 ${compactNos(bases)} 条`] : [];
+  });
+  add(
+    "claim-multiple-basis",
+    "多项从属权利要求的引用基础",
+    stacked.length ? "error" : "ok",
+    stacked.length
+      ? `${stacked.join("；")}；多项从属权利要求不得作为另一项多项从属权利要求的引用基础。`
+      : multiple.length ? "没有多项从属权利要求引用另一项多项从属权利要求" : "没有多项从属权利要求",
+  );
+
+  // 从属权利要求写在所从属的独立权利要求之后、下一项独立权利要求之前
+  const misplaced = new Map<string, { nos: number[]; roots: number[]; nearest: number }>();
+  for (const node of dependents) {
+    const nearest = all.filter((other) => other.head && other.claim.no < node.claim.no).pop()?.claim.no;
+    const roots = [...rootsOf(node.claim.no, nodes)];
+    if (nearest === undefined || !roots.length || roots.includes(nearest)) continue;
+    const key = `${roots.join(",")}|${nearest}`;
+    const group = misplaced.get(key) ?? { nos: [], roots, nearest };
+    group.nos.push(node.claim.no);
+    misplaced.set(key, group);
+  }
+  add(
+    "claim-order",
+    "从属权利要求的位置",
+    misplaced.size ? "warn" : "ok",
+    misplaced.size
+      ? `${[...misplaced.values()].map((group) => `第 ${compactNos(group.nos)} 条从属于第 ${group.roots.join("、")} 条，却写在另一项独立权利要求第 ${group.nearest} 条之后`).join("；")}；从属权利要求应写在所从属的独立权利要求之后、下一项独立权利要求之前。`
+      : "均紧跟所从属的独立权利要求",
+  );
+
+  // 引用部分写明被引用权利要求的编号并重述其主题名称：允许简称，不允许换成别的主题（方法写成装置、装置写成系统）
+  const referenceIssues = dependents.flatMap((node) => {
+    const issues: string[] = [];
+    if (node.unnumbered) issues.push(`第 ${node.claim.no} 条用“前述权利要求”一类写法，没有写明所引用权利要求的编号`);
+    if (node.unnamed) issues.push(`第 ${node.claim.no} 条的引用部分没有写主题名称`);
+    const parents = node.parents.map((no) => nodes.get(no)).filter((parent): parent is ClaimNode => Boolean(parent?.subject));
+    const consistent = (parent: ClaimNode) => (node.kind === "use" && parent.kind === "use") || sameSubject(node.subject, parent.subject);
+    if (node.subject && parents.length && !parents.some(consistent)) {
+      issues.push(`第 ${node.claim.no} 条写作“${node.subject}”，所引用的第 ${parents.map((parent) => parent.claim.no).join("、")} 条为“${[...new Set(parents.map((parent) => parent.subject))].join("”“")}”`);
+    }
+    return issues;
+  });
+  add(
+    "claim-reference",
+    "从属权利要求的引用部分",
+    referenceIssues.length ? "warn" : "ok",
+    referenceIssues.length
+      ? `${referenceIssues.slice(0, 3).join("；")}${referenceIssues.length > 3 ? `；另有 ${referenceIssues.length - 3} 项` : ""}；引用部分应写明所引用权利要求的编号并重述其主题名称，例如“根据权利要求1所述的……装置”。`
+      : "写明了编号，主题名称与所引用的权利要求一致",
+  );
+
+  // “所述××”须在本项前文或所引用的权利要求中出现过，否则缺乏引用基础，保护范围不清楚
+  const gaps = antecedentGaps(nodes);
+  add(
+    "claim-antecedent",
+    "“所述”特征的引用基础",
+    gaps.length ? "warn" : "ok",
+    gaps.length
+      ? `${gaps.slice(0, 5).join("、")}${gaps.length > 5 ? ` 等 ${gaps.length} 处` : ""}在本项前文和所引用的权利要求中没有出现，可能缺乏引用基础；请补充在先表述或统一用语。`
+      : "“所述”指代的特征均有在先表述",
+  );
+  return checks;
+}
+
 /** The parsed application as formula-audit sources: the abstract, each claim, each part of the description. */
 export function formulaSourcesOf(app: ParsedApplication): FormulaSource[] {
   const sources: FormulaSource[] = [];
@@ -508,6 +833,9 @@ export function formalCheck(app: ParsedApplication): FormalReport {
 
     const onePart = independents.filter((claim) => !claim.lines.join("").includes("其特征在于"));
     add("claim-two-part", "独立权利要求两段式", onePart.length ? "warn" : "ok", onePart.length ? `${listNos(onePart.map((claim) => claim.no))}没有“其特征在于”，确认是否适合写成前序部分加特征部分。` : "前序部分 + 特征部分");
+
+    // 多项从属权利要求、从属权利要求的位置与引用部分、“所述”特征的引用基础
+    for (const check of claimStructureChecks(app.claims)) add(check.id, check.label, check.level, check.detail);
   }
 
   // 说明书
