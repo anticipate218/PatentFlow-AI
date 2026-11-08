@@ -3,6 +3,7 @@
  * Removing a code from ACCESS_CODES revokes every session issued for it.
  */
 import { GITHUB_MARK_PATH, NOTICE_ACK, NOTICE_SECTIONS, NOTICE_SUMMARY, NOTICE_TITLE, NOTICE_VERSION, REPOSITORY_URL } from '../src/site-info.ts';
+import { noticeEntryScript } from '../src/notice-entry.ts';
 export interface GateEnv {
   ACCESS_MODE?: string;
   ACCESS_CODES?: string;
@@ -141,7 +142,7 @@ function entryPage(needsCode: boolean, error: string | null, open = false): Resp
     needsCode ? '<label for="code">邀请码</label><input id="code" name="code" type="password" autocomplete="off" placeholder="请输入邀请码" required maxlength="200">' : '',
     '<label class="ack"><input type="checkbox" name="notice" value="' + NOTICE_VERSION + '" required><span>' + NOTICE_ACK + '</span></label>',
     msg ? '<p class="err" role="alert">' + msg + '</p>' : '',
-    '<button type="submit">知悉风险并进入测试站</button><p class="foot">不希望继续使用时，可关闭本页面。公告版本：' + NOTICE_VERSION + ' · 工作台顶部可随时重读。</p></form></main></body></html>',
+    '<button type="submit">知悉风险并进入测试站</button><p class="foot">每次打开或刷新均需重新确认；站内切换功能不重复提示。不希望继续使用时，可关闭本页面。公告版本：' + NOTICE_VERSION + ' · 工作台顶部可随时重读。</p></form></main><script>' + noticeEntryScript() + '</script></body></html>',
   ].join('');
   return new Response(html, { status: needsCode ? 401 : 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', ...SECURITY } });
 }

@@ -580,7 +580,7 @@ export function DshFrame() {
           <a className="dsh-github" href={REPOSITORY_URL} target="_blank" rel="noopener noreferrer" aria-label="GitHub 开源仓库（新标签页）" title="查看 GitHub 开源仓库">
             <svg viewBox="0 0 24 24" width="19" height="19" fill="currentColor" aria-hidden="true"><path d={GITHUB_MARK_PATH} /></svg><span>GitHub</span><small>开源代码 ↗</small>
           </a>
-          <button type="button" className="dsh-top-btn notice-trigger" onClick={() => setNoticeOpen(true)} aria-label="阅读使用公告与风险提示"><Glyph name="info" /><span>使用公告</span></button>
+          <button type="button" className="dsh-top-btn notice-trigger" onClick={() => setNoticeOpen(true)} aria-label="阅读免责声明与风险提示"><Glyph name="info" /><span>免责声明</span></button>
           <button type="button" className="dsh-top-btn dsh-kbar" aria-haspopup="dialog" aria-label="打开命令面板（Ctrl+K）" title="命令面板（Ctrl+K）" onClick={() => setPalette(true)}>
             <Glyph name="search" />
             <span>Ctrl K</span>

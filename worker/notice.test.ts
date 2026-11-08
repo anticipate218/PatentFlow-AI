@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 import { beforeEach, test } from 'node:test';
 import type { TestContext } from 'node:test';
 import worker from './index.ts';
@@ -45,6 +46,19 @@ test('altering an unacknowledged cookie cannot forge acknowledgement', async () 
   const { env, cookie } = await legacy(); const parts = cookie.split('.'); parts.splice(2, 0, NOTICE_VERSION);
   const response = await worker.fetch(request('/api/providers', parts.join('.')), env, context());
   assert.equal(response.status, 401);
+});
+
+test('a signed acknowledgement of the previous notice cannot admit the new version', async () => {
+  const { env, tag } = await legacy();
+  const body = tag + '.' + (Math.floor(Date.now() / 1000) + 3600) + '.2026-11-03-v1';
+  const signature = createHmac('sha256', env.SESSION_SECRET!).update(body).digest('base64url');
+  const cookie = 'pf_session=' + body + '.' + signature;
+  assert.equal(await session(request('/', cookie), env), tag);
+  assert.equal(hasCurrentNotice(request('/', cookie)), false);
+  assert.equal((await worker.fetch(request('/api/providers', cookie), env, context())).status, 428);
+  const html = await (await worker.fetch(request('/', cookie), env, context())).text();
+  assert.ok(html.includes(NOTICE_VERSION));
+  assert.match(html, /免责声明与使用风险提示/);
 });
 for (const notice of ['', 'outdated-v0']) test('missing or old acknowledgement is not accepted: ' + notice, async () => {
   const { env, cookie } = await legacy();

@@ -6,7 +6,7 @@
 
 ## 🚀 [立即在线体验 · 无需邀请码](https://patentflow-ai.patentflow-ai.workers.dev/)
 
-**公开访问，无需注册。阅读使用公告后即可进入工作台。**
+**公开访问，无需注册。每次打开均需阅读并确认免责声明，再进入工作台。**
 
 [在线体验](https://patentflow-ai.patentflow-ai.workers.dev/) · [自行部署](docs/cloudflare-deploy.md) · [配置自己的模型](docs/bring-your-own-model.md) · [验证记录](docs/release-validation.md) · [贡献者](#contributors)
 

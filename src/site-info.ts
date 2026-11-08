@@ -1,8 +1,8 @@
 export const REPOSITORY_URL = 'https://github.com/anticipate218/PatentFlow-AI';
-export const NOTICE_VERSION = '2026-11-03-v1';
-export const NOTICE_TITLE = '使用公告与风险提示';
+export const NOTICE_VERSION = '2026-11-08-v2';
+export const NOTICE_TITLE = '免责声明与使用风险提示';
 export const NOTICE_SUMMARY = 'AI 初稿仅供参考，未经核验请勿直接提交。';
-export const NOTICE_ACK = '我已阅读并知悉以上使用须知与风险提示';
+export const NOTICE_ACK = '我已阅读并知悉免责声明与使用风险，使用前将自行核验生成内容';
 export const NOTICE_SECTIONS = [
   { title: '仅供辅助参考，不保证授权', text: '本工具生成的申请文件、附图、检索线索及自检结果均为 AI 辅助初稿，仅供研究、整理和撰写参考，不构成法律意见或专利代理服务。我们不保证其准确性、完整性、可实施性、新颖性、创造性、符合提交要求或获得授权。' },
   { title: '核验后再使用或提交', text: '请自行核验技术事实、实验数据、公式、附图、引用来源及申请信息，不得将虚构或未核实的数据当作实测事实。正式提交前，建议由专利代理师等专业人员审阅，并通过官方渠道核实检索与提交要求。' },

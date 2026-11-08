@@ -1269,6 +1269,7 @@ p.fine a { display: inline-block; min-height: 24px; line-height: 24px; }
 .usage-notice::backdrop { background: #14233770; backdrop-filter: blur(4px); }
 .usage-notice header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .usage-notice header h2 { margin: 6px 0 16px; font-size: 22px; }
+.usage-notice header h2:focus { outline: none; }
 .usage-notice header button { border: 0; background: #f1f5fb; border-radius: 9px; width: 34px; height: 34px; font-size: 24px; }
 .notice-eyebrow { color: #557196; font-size: 12px; }
 .notice-summary { border-left: 3px solid #d3982e; border-radius: 6px; background: #fff8e8; padding: 12px 14px; color: #795217; font-weight: 650; }
@@ -1276,6 +1277,12 @@ p.fine a { display: inline-block; min-height: 24px; line-height: 24px; }
 .notice-sections p { font-size: 13px; line-height: 1.8; color: #54647a; margin: 0; }
 .usage-notice footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; border-top: 1px solid #e4ebf4; margin-top: 22px; padding-top: 16px; }
 .usage-notice footer small { font-size: 11px; color: #8190a5; }
+.notice-gated-workspace { height: 100%; }
+.notice-entry-surface { min-height: 100%; padding: 40px; background: radial-gradient(at 10% 0%, #eaf0ff, transparent 55%), #f6f8fc; color: #557196; }
+.notice-entry-surface strong { display: block; font-size: 22px; color: #263650; }
+.notice-confirm { display: flex; align-items: flex-start; gap: 10px; width: 100%; font-size: 13px; line-height: 1.7; cursor: pointer; }
+.notice-confirm input { flex: none; width: 17px; height: 17px; margin: 3px 0 0; accent-color: #155eef; }
+.usage-notice footer .btn:disabled { cursor: not-allowed; opacity: .45; }
 @media (max-width: 800px) { .dsh-github small { display: none; } .dsh-top { gap: 6px; } .dsh-github { padding: 7px 9px; } }
 @media (max-width: 440px) { .dsh-top-title { max-width: 26vw; } .dsh-top .dsh-kbar { display: none; } .usage-notice { padding: 18px; } }
 @media (prefers-reduced-motion: reduce) { .dsh-github { transition: none; } .dsh-github:hover { transform: none; } }
