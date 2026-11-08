@@ -65,6 +65,8 @@ node scripts/live-pipeline.mjs
 
 ## 公告、密钥与安全
 
+访问统计使用独立的 SITE_TRAFFIC / SiteTraffic SQLite Durable Object。wrangler.jsonc 中的 site-traffic-v1 迁移必须保留在已有 public-quota-v1 之后，不删除既有迁移；部署时会创建统计绑定，不需要新增密钥或同步旧模型配置。数据口径、去重及隐私边界见 [访问统计说明](site-traffic.md)。
+
 公告内容和版本在 src/site-info.ts。内容变化时更新 NOTICE_VERSION，新旧访客须知悉当前版本；签名 Cookie 是访问状态，不是用户实名身份或法律电子签名。
 
 前端每次新开、刷新或从历史恢复时单独提示并要求勾选；站内导航不重复提示。首次服务端确认后的跳转通过一次性、30 秒有效的同标签页标记避免连续重复弹窗，刷新和历史恢复不使用该标记。Cookie 的有效天数不控制前端提示频率。

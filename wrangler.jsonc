@@ -8,9 +8,9 @@
   "workers_dev": true,
   "preview_urls": false,
   "durable_objects": {
-    "bindings": [{ "name": "PUBLIC_QUOTA", "class_name": "PublicQuota" }]
+    "bindings": [{ "name": "PUBLIC_QUOTA", "class_name": "PublicQuota" }, { "name": "SITE_TRAFFIC", "class_name": "SiteTraffic" }]
   },
-  "migrations": [{ "tag": "public-quota-v1", "new_sqlite_classes": ["PublicQuota"] }],
+  "migrations": [{ "tag": "public-quota-v1", "new_sqlite_classes": ["PublicQuota"] }, { "tag": "site-traffic-v1", "new_sqlite_classes": ["SiteTraffic"] }],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

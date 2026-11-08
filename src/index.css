@@ -1278,6 +1278,14 @@ p.fine a { display: inline-block; min-height: 24px; line-height: 24px; }
 .usage-notice footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; border-top: 1px solid #e4ebf4; margin-top: 22px; padding-top: 16px; }
 .usage-notice footer small { font-size: 11px; color: #8190a5; }
 .notice-gated-workspace { height: 100%; }
+.traffic-badge { color: #466581; }
+.traffic-badge b { color: #195db2; font-variant-numeric: tabular-nums; }
+.traffic-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.traffic-grid section { padding: 16px; border: 1px solid #e1eaf5; border-radius: 14px; background: linear-gradient(140deg, #f4f8ff, #fff); }
+.traffic-grid span { display: block; color: #6a7b91; font-size: 12px; }
+.traffic-grid strong { display: block; color: #155eef; font-size: clamp(24px, 4vw, 32px); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.traffic-status { color: #65778e; font-size: 12px; margin-top: 12px; }
+@media (max-width: 1000px) { .traffic-badge .traffic-preview { display: none; } }
 .notice-entry-surface { min-height: 100%; padding: 40px; background: radial-gradient(at 10% 0%, #eaf0ff, transparent 55%), #f6f8fc; color: #557196; }
 .notice-entry-surface strong { display: block; font-size: 22px; color: #263650; }
 .notice-confirm { display: flex; align-items: flex-start; gap: 10px; width: 100%; font-size: 13px; line-height: 1.7; cursor: pointer; }

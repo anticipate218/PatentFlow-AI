@@ -18,8 +18,10 @@ import { byokHosts, parseByok } from './byok.ts';
 import type { ByokEnv } from './byok.ts';
 import { quotaFetch, quotaLimit, type PublicQuotaEnv } from './public-quota.ts';
 export { PublicQuota } from './public-quota.ts';
+import { TRAFFIC_EVENT_ID, trafficOptOut, trafficVisitorDigest, type TrafficEnv } from './site-traffic.ts';
+export { SiteTraffic } from './site-traffic.ts';
 
-interface Env extends GateEnv, ByokEnv, PublicQuotaEnv {
+interface Env extends GateEnv, ByokEnv, PublicQuotaEnv, TrafficEnv {
   ASSETS: { fetch(request: Request): Promise<Response> };
   AGNES_API_KEY?: string;
   AGNES_BASE_URL?: string;
@@ -382,6 +384,29 @@ function clientIp(request: Request): string {
   return request.headers.get("CF-Connecting-IP") || "local";
 }
 
+async function traffic(request: Request, who: string, env: Env): Promise<Response> {
+  if (request.method !== 'GET' && request.method !== 'POST') return json(405, { ok: false, error: '不支持此方法。' });
+  if ((request.headers.get('Origin') && request.headers.get('Origin') !== new URL(request.url).origin)
+    || request.headers.get('Sec-Fetch-Site') === 'cross-site') return json(403, { ok: false, error: '跨站请求被拒绝。' });
+  if (!limiter.allow('traffic:' + clientIp(request), 120, 60_000)) return json(429, { ok: false, error: '统计请求过于频繁，请稍后重试。' });
+  let eventId: string | undefined;
+  if (request.method === 'POST') {
+    const bytes = await readBody(request, 256);
+    if (bytes instanceof Response) return bytes;
+    const body = JSON.parse(new TextDecoder().decode(bytes) || 'null') as { eventId?: unknown } | null;
+    if (typeof body?.eventId !== 'string' || !TRAFFIC_EVENT_ID.test(body.eventId) || Object.keys(body).some(key => key !== 'eventId')) return json(400, { ok: false, error: '统计事件格式不正确。' });
+    if (!trafficOptOut(request)) eventId = body.eventId;
+  }
+  if (!env.SITE_TRAFFIC) return json(503, { ok: false, error: '访问统计暂不可用，不影响其他功能。' });
+  const stub = env.SITE_TRAFFIC.get(env.SITE_TRAFFIC.idFromName('site-traffic-v1'));
+  const result = await stub.fetch(new Request('https://traffic.internal/' + (eventId ? 'record' : 'summary'), {
+    method: eventId ? 'POST' : 'GET', signal: AbortSignal.timeout(3000),
+    ...(eventId ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ eventId, visitor: await trafficVisitorDigest(env.SESSION_SECRET!, who) }) } : {}),
+  }));
+  if (!result.ok) return json(503, { ok: false, error: '访问统计暂不可用，不影响其他功能。' });
+  return json(200, await result.json());
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: Ctx): Promise<Response> {
     const url = new URL(request.url);
@@ -431,6 +456,10 @@ export default {
     if (!hasCurrentNotice(request)) {
       if (path.startsWith('/api/')) return json(428, { error: '请刷新页面，阅读并确认当前使用公告后再使用。', code: 'NOTICE_REQUIRED', noticeVersion: NOTICE_VERSION });
       return noticePage(null, publicAccess(env));
+    }
+    if (path === '/api/traffic') {
+      try { return await traffic(request, who, env); }
+      catch (error) { return json(error instanceof SyntaxError ? 400 : 503, { ok: false, error: '访问统计暂不可用，不影响其他功能。' }); }
     }
     if (path.startsWith("/api/")) return api(request, path, publicAccess(env) ? 'public-ip:' + clientIp(request) : who, env, ctx);
 

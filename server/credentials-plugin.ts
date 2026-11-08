@@ -117,6 +117,10 @@ export function credentialApi(root: string): Plugin {
       server.middlewares.use(async (req, res, next) => {
         const url = req.url?.split("?")[0] ?? "";
         if (!url.startsWith("/api/")) return next();
+        if (url === '/api/traffic') {
+          send(res, 503, { ok: false, error: '本地 Vite 不累计公开站访问量；可使用 Worker 本地模式测试。' });
+          return;
+        }
         try {
           if (await handleAgentRoute(url, req, res, { read, write, publicView, readBody, send })) return;
           if (req.method === "GET" && url === "/api/providers") {

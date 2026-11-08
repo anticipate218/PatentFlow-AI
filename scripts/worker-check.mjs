@@ -126,8 +126,8 @@ async function configure(name, bindings) {
     main: path.join(root, "worker", "index.ts"),
     compatibility_date: "2026-10-01", compatibility_flags: ["nodejs_compat"],
     assets: { directory: assets, binding: "ASSETS", not_found_handling: "single-page-application", run_worker_first: true },
-    durable_objects: { bindings: [{ name: 'PUBLIC_QUOTA', class_name: 'PublicQuota' }] },
-    migrations: [{ tag: 'public-quota-v1', new_sqlite_classes: ['PublicQuota'] }],
+    durable_objects: { bindings: [{ name: 'PUBLIC_QUOTA', class_name: 'PublicQuota' }, { name: 'SITE_TRAFFIC', class_name: 'SiteTraffic' }] },
+    migrations: [{ tag: 'public-quota-v1', new_sqlite_classes: ['PublicQuota'] }, { tag: 'site-traffic-v1', new_sqlite_classes: ['SiteTraffic'] }],
     vars: bindings,
   }, null, 2) + "\n");
   return { varsFile, configFile };
@@ -217,6 +217,13 @@ async function run() {
   assert.ok(publicCookie.startsWith('pf_session=p.'));
   const publicHeaders = { Cookie: publicCookie, 'Content-Type': 'application/json' };
   console.log('PASS public notice admits an anonymous visitor');
+  const trafficEvent = JSON.stringify({ eventId: '00000000-0000-4000-8000-000000000001' });
+  const trafficFirst = await (await request(base + '/api/traffic', { method: 'POST', headers: publicHeaders, body: trafficEvent })).json();
+  assert.deepEqual(trafficFirst.total, { views: 1, visitors: 1 });
+  const trafficRetry = await (await request(base + '/api/traffic', { method: 'POST', headers: publicHeaders, body: trafficEvent })).json();
+  assert.deepEqual(trafficRetry.total, trafficFirst.total);
+  assert.deepEqual((await (await request(base + '/api/traffic', { headers: publicHeaders })).json()).total, trafficFirst.total);
+  console.log('PASS persistent traffic records one view and ignores retries and summary reads');
   const firstModel = await request(base + '/api/chat', { method: 'POST', headers: publicHeaders, body: JSON.stringify({ messages: [{ role: 'user', content: 'synthetic budget test' }] }) });
   assert.equal((await firstModel.json()).ok, true);
   const secondModel = await request(base + '/api/agent', { method: 'POST', headers: { ...publicHeaders, Accept: 'text/event-stream' }, body: JSON.stringify({ tools: false, messages: [{ role: 'user', content: 'synthetic budget test' }] }) });
@@ -235,6 +242,9 @@ async function run() {
   const afterRestart = await request(base + '/api/chat', { method: 'POST', headers: publicHeaders, body: JSON.stringify({ messages: [{ role: 'user', content: 'restart cannot reset usage' }] }) });
   const restartDenied = await afterRestart.json(); assert.equal(restartDenied.ok, false); assert.match(restartDenied.detail, /今日共享模型/);
   console.log('PASS durable quota survives restarting the Worker runtime');
+  const trafficRestored = await (await request(base + '/api/traffic', { headers: publicHeaders })).json();
+  assert.deepEqual(trafficRestored.total, { views: 1, visitors: 1 });
+  console.log('PASS traffic counters survive restarting the Worker runtime');
 }
 
 try {

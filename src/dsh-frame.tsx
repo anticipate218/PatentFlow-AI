@@ -27,6 +27,7 @@ import { CommandPalette, type PaletteCommand } from "./command-palette.tsx";
 import { sizeLabel, pageCount } from "./page-count.ts";
 import { UsageNotice } from './usage-notice.tsx';
 import { GITHUB_MARK_PATH, REPOSITORY_URL } from './site-info.ts';
+import { SiteTrafficBadge } from './site-traffic.tsx';
 
 // docx (and the export pipeline built on it) is several MB of source: load it only when the user actually exports.
 const PackageCard = lazy(() => import("./package-card.tsx").then((mod) => ({ default: mod.PackageCard })));
@@ -577,6 +578,7 @@ export function DshFrame() {
             </span>
           ) : null}
           <span className="dsh-top-spacer" />
+          <SiteTrafficBadge />
           <a className="dsh-github" href={REPOSITORY_URL} target="_blank" rel="noopener noreferrer" aria-label="GitHub 开源仓库（新标签页）" title="查看 GitHub 开源仓库">
             <svg viewBox="0 0 24 24" width="19" height="19" fill="currentColor" aria-hidden="true"><path d={GITHUB_MARK_PATH} /></svg><span>GitHub</span><small>开源代码 ↗</small>
           </a>

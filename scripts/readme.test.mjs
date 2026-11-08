@@ -18,6 +18,14 @@ test('documented public quota defaults match the deploy configuration', () => {
   const banner = fs.readFileSync('docs/assets/readme-banner.svg', 'utf8');
   assert.ok(banner.includes('PatentFlow AI')); assert.doesNotMatch(banner, /<script|onload=/i);
 });
+
+test('traffic storage is isolated from public quotas and its additive migration is retained', () => {
+  const config = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8').replace(/^\s*\/\/.*$/gm, ''));
+  assert.ok(config.durable_objects.bindings.some(binding => binding.name === 'SITE_TRAFFIC' && binding.class_name === 'SiteTraffic'));
+  assert.ok(config.durable_objects.bindings.some(binding => binding.name === 'PUBLIC_QUOTA' && binding.class_name === 'PublicQuota'));
+  assert.deepEqual(config.migrations.map(migration => migration.tag), ['public-quota-v1', 'site-traffic-v1']);
+  assert.deepEqual(config.migrations[1].new_sqlite_classes, ['SiteTraffic']);
+});
 test('every wrangler.jsonc var is documented with its default in the deploy guide', () => {
   const config = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8').replace(/^\s*\/\/.*$/gm, ''));
   const guide = fs.readFileSync('docs/cloudflare-deploy.md', 'utf8');
