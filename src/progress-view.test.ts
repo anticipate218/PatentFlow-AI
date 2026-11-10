@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { packageProgressText } from "./export-package.ts";
-import type { PackageProgress } from "./export-package.ts";
+import { packageProgressText } from "./package-progress.ts";
+import type { PackageProgress } from "./package-progress.ts";
 import type { ProgressStage, RunProgress, StageStatus } from "./run-progress.ts";
 import { createJobLock, runProgressView, STALL_MS, stoppedAt, ZIP_TIMEOUT_MS, zipDoneState, zipStoppedState, zipView } from "./progress-view.ts";
 import type { ZipState } from "./progress-view.ts";

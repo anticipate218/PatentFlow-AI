@@ -34,6 +34,7 @@ import { saveBlob, safeFileName } from "./download.ts";
 import { writeZip } from "./zip.ts";
 import { drawableFigures, ensureFigureImages } from "./figure-assets.ts";
 import type { FigureImage } from "./figure-assets.ts";
+import type { PackagePhase, PackageProgress } from "./package-progress.ts";
 
 export type PackageKey = "request" | "abstract" | "abstract-figure" | "claims" | "description" | "drawings" | "review" | "full";
 
@@ -202,27 +203,6 @@ export function packageReadme(title: string, files: PackageFile[], report: Forma
   ].join("\r\n");
 }
 
-/** 打包进度的阶段：核对格式 → 绘制附图 → 生成 Word → 压缩 → 保存 → 完成。 */
-export type PackagePhase = "check" | "figures" | "documents" | "zip" | "save" | "done";
-
-/**
- * 一次打包进度。所有计数都是真实完成数：每幅附图、每份 Word、压缩、保存各算一步，
- * 只在对应工作真正开始或完成时上报，不按耗时估算。
- */
-export interface PackageProgress {
-  phase: PackagePhase;
-  /** 本阶段已完成的数量。 */
-  done: number;
-  /** 本阶段的总数。 */
-  total: number;
-  /** 正在处理的条目（如“说明书”“图2”）；没有时为空串。 */
-  label: string;
-  /** 整次打包已完成的步数。 */
-  overallDone: number;
-  /** 整次打包的总步数；一次打包中保持不变。 */
-  overallTotal: number;
-}
-
 export interface PackageHooks {
   /** 每步开始或完成时调用；传入后每步之间会让出一次事件循环，便于页面重绘。 */
   onProgress?: (progress: PackageProgress) => void;
@@ -242,10 +222,6 @@ export interface PreparedPackageZip {
 
 const PHASE_ORDER: PackagePhase[] = ["check", "figures", "documents", "zip", "save", "done"];
 type PhasePlan = Partial<Record<PackagePhase, number>>;
-
-export function isAbortError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && (error as { name?: unknown }).name === "AbortError";
-}
 
 function abortError(): Error {
   const error = new Error("已取消打包。");
@@ -386,24 +362,4 @@ export async function downloadPackageZip(
   saveBlob(new Blob([result.zip as unknown as BlobPart], { type: "application/zip" }), fileName);
   run.finish();
   return result.report;
-}
-
-/** 进度的中文说明：当前步骤和真实计数。 */
-export function packageProgressText(progress: PackageProgress): string {
-  const item = progress.label ? ` · ${progress.label}` : "";
-  const current = Math.min(progress.done + 1, progress.total);
-  switch (progress.phase) {
-    case "check":
-      return "正在核对申请文件格式";
-    case "figures":
-      return progress.done < progress.total ? `正在绘制附图 ${current} / ${progress.total}${item}` : `附图已全部绘制（${progress.total} 幅）`;
-    case "documents":
-      return progress.done < progress.total ? `正在生成 Word ${current} / ${progress.total}${item}` : `Word 已全部生成（${progress.total} 份）`;
-    case "zip":
-      return progress.done < progress.total ? "正在压缩打包" : "压缩完成";
-    case "save":
-      return "正在保存到下载文件夹";
-    case "done":
-      return "全套文件已生成";
-  }
 }
