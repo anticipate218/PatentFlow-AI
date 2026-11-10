@@ -37,11 +37,32 @@ test('retries deduplicate while distinct page openings increase PV, not the same
   const data = await record(counter, visitorA, event(2));
   assert.deepEqual(data.total, { views: 2, visitors: 1 });
   assert.equal(data.today.visitors, 1);
-  assert.deepEqual((await record(counter, visitorB)).total, { views: 3, visitors: 2 });
+  assert.deepEqual((await record(counter, visitorB, event(3))).total, { views: 3, visitors: 2 });
 });
-test('same page ID from different visitors is not a shared deduplication key', async t => {
+test('the same random page event stays idempotent when its session cookie changes', async t => {
   const { counter } = database(t);
-  await record(counter); assert.equal((await record(counter, visitorB)).total.views, 2);
+  await record(counter); assert.deepEqual((await record(counter, visitorB)).total, { views: 1, visitors: 1 });
+  assert.deepEqual((await record(counter, visitorB, event(2))).total, { views: 2, visitors: 2 });
+});
+
+test('adding the event index preserves historical data including existing duplicates', async t => {
+  const { counter, storage, db } = database(t);
+  await record(counter);
+  db.prepare('INSERT INTO traffic_events VALUES (?, ?, ?)').run(visitorB, event(1), Date.now());
+  const restored = new SiteTraffic({ storage });
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM traffic_events').get()!.count, 2);
+  assert.deepEqual((await record(restored, visitorB)).total, { views: 1, visitors: 1 });
+});
+
+test('public API retries after a new signed cookie do not create an extra visit', async t => {
+  const { counter } = database(t);
+  const env = environment({ ACCESS_MODE: 'public', SITE_TRAFFIC: { idFromName: () => 'test', get: () => counter } });
+  const first = await authenticated('/api/traffic', env, { method: 'POST', body: JSON.stringify({ eventId: event(8) }) });
+  const retry = await authenticated('/api/traffic', env, { method: 'POST', body: JSON.stringify({ eventId: event(8) }) });
+  assert.notEqual(first.headers.get('Cookie'), retry.headers.get('Cookie'));
+  await worker.fetch(first, env, context());
+  const data = await (await worker.fetch(retry, env, context())).json() as TrafficSnapshot;
+  assert.deepEqual(data.total, { views: 1, visitors: 1 });
 });
 test('daily UV and PV reset at Beijing midnight while all-time values survive', async t => {
   const { counter } = database(t);

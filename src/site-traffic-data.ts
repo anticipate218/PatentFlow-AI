@@ -1,6 +1,24 @@
 import type { TrafficSnapshot } from './site-traffic-types.ts';
 export type { TrafficSnapshot } from './site-traffic-types.ts';
 
+export function trafficDayLabel(snapshot: TrafficSnapshot | undefined, now = Date.now()): string {
+  const today = new Date(now + 8 * 3600_000).toISOString().slice(0, 10);
+  return !snapshot || snapshot.today.day === today ? '今日' : snapshot.today.day + '（历史快照）';
+}
+
+export function nextTrafficDayDelay(now = Date.now()): number {
+  const day = 86400_000, offset = 8 * 3600_000;
+  return day - ((now + offset) % day) + 50;
+}
+
+/** A delayed initial POST must not overwrite a newer read after midnight. */
+export function newestTrafficSnapshot(current: TrafficSnapshot | undefined, incoming: TrafficSnapshot): TrafficSnapshot {
+  if (!current) return incoming;
+  if (incoming.today.day < current.today.day) return current;
+  if (incoming.today.day === current.today.day && incoming.total.views < current.total.views) return current;
+  return incoming;
+}
+
 export function parseTrafficSnapshot(value: unknown): TrafficSnapshot {
   const data = value as TrafficSnapshot | null;
   const count = (number: unknown) => typeof number === 'number' && Number.isSafeInteger(number) && number >= 0;

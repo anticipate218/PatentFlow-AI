@@ -25,6 +25,8 @@ export class SiteTraffic {
     sql.exec('CREATE TABLE IF NOT EXISTS traffic_visitors (digest TEXT PRIMARY KEY, last_day TEXT NOT NULL)');
     sql.exec('CREATE TABLE IF NOT EXISTS traffic_events (visitor TEXT NOT NULL, event TEXT NOT NULL, at_ms INTEGER NOT NULL, PRIMARY KEY(visitor, event))');
     sql.exec('CREATE INDEX IF NOT EXISTS traffic_event_time ON traffic_events(at_ms)');
+    // Additive, non-unique index also works with historical cross-session duplicates.
+    sql.exec('CREATE INDEX IF NOT EXISTS traffic_event_id ON traffic_events(event)');
   }
 
   private snapshot(now: number): TrafficSnapshot {
@@ -46,8 +48,8 @@ export class SiteTraffic {
     const visitor = body.visitor, eventId = body.eventId.toLowerCase(), now = Date.now(), { day } = quotaDay(now);
     const result = this.storage.transactionSync(() => {
       const sql = this.storage.sql;
-      // Retries of one page must not inflate counts, even across the daily boundary.
-      const duplicate = sql.exec('SELECT event FROM traffic_events WHERE visitor = ? AND event = ?', visitor, eventId).toArray().length > 0;
+      // A cryptographically random page ID stays idempotent even if another tab replaces the cookie.
+      const duplicate = sql.exec('SELECT event FROM traffic_events WHERE event = ? LIMIT 1', eventId).toArray().length > 0;
       if (duplicate) return this.snapshot(now);
       const previous = sql.exec<{ last_day: string }>('SELECT last_day FROM traffic_visitors WHERE digest = ?', visitor).toArray()[0];
       sql.exec('INSERT INTO traffic_events VALUES (?, ?, ?)', visitor, eventId, now);

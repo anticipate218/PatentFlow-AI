@@ -25,6 +25,7 @@
     "cf:deploy": "npm run verify && wrangler deploy",
     "cf:secrets": "node scripts/cf-secrets.mjs",
     "test:worker": "node scripts/worker-smoke.mjs",
+    "health:online": "node scripts/site-health.mjs",
     "test:worker:mock": "node scripts/worker-check.mjs"
   },
   "dependencies": {

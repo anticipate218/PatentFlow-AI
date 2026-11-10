@@ -222,6 +222,12 @@ async function run() {
   assert.deepEqual(trafficFirst.total, { views: 1, visitors: 1 });
   const trafficRetry = await (await request(base + '/api/traffic', { method: 'POST', headers: publicHeaders, body: trafficEvent })).json();
   assert.deepEqual(trafficRetry.total, trafficFirst.total);
+  const replacement = await request(base + '/__notice', { method: 'POST', redirect: 'manual', body: new URLSearchParams({ notice: NOTICE_VERSION }) });
+  const replacementCookie = (replacement.headers.get('set-cookie') || '').split(';')[0];
+  assert.notEqual(replacementCookie, publicCookie);
+  const changedSessionRetry = await (await request(base + '/api/traffic', { method: 'POST', headers: { ...publicHeaders, Cookie: replacementCookie }, body: trafficEvent })).json();
+  assert.deepEqual(changedSessionRetry.total, trafficFirst.total);
+  console.log('PASS traffic event retries remain idempotent after the session cookie changes');
   assert.deepEqual((await (await request(base + '/api/traffic', { headers: publicHeaders })).json()).total, trafficFirst.total);
   console.log('PASS persistent traffic records one view and ignores retries and summary reads');
   const firstModel = await request(base + '/api/chat', { method: 'POST', headers: publicHeaders, body: JSON.stringify({ messages: [{ role: 'user', content: 'synthetic budget test' }] }) });

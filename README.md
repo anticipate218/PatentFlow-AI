@@ -21,6 +21,8 @@
 
 ## 在线体验与部署
 
+维护者可运行 npm run health:online 做不消耗模型/检索额度的只读巡查；仓库 Online health 工作流每 6 小时检查一次。健康检查不替代完整功能验收。[巡查与 PR 审查记录](docs/qa-2026-11-10.md)
+
 ### 直接体验
 
 **访问：[https://patentflow-ai.patentflow-ai.workers.dev/](https://patentflow-ai.patentflow-ai.workers.dev/)**

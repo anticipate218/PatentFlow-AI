@@ -1,9 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createTrafficClient, parseTrafficSnapshot } from './site-traffic-data.ts';
+import { createTrafficClient, nextTrafficDayDelay, parseTrafficSnapshot, trafficDayLabel } from './site-traffic-data.ts';
 
 const sample = { ok: true, timezone: 'Asia/Shanghai', startedAt: null, total: { views: 0, visitors: 0 }, today: { day: '2026-11-08', views: 0, visitors: 0 } };
 const eventId = '00000000-0000-4000-8000-000000000001';
+test('old snapshots never present yesterday as today and midnight scheduling uses Beijing time', () => {
+  const before = Date.parse('2026-11-08T15:59:59Z');
+  const after = Date.parse('2026-11-08T16:00:00Z');
+  assert.equal(trafficDayLabel(parseTrafficSnapshot(sample), before), '今日');
+  assert.equal(trafficDayLabel(parseTrafficSnapshot(sample), after), '2026-11-08（历史快照）');
+  assert.equal(nextTrafficDayDelay(before), 1050);
+  assert.equal(nextTrafficDayDelay(after), 86400050);
+});
 test('StrictMode and duplicate component mounts share one record request', async () => {
   const requests: RequestInit[] = [];
   const client = createTrafficClient(async (_url, init) => { requests.push(init!); return Response.json(sample); }, eventId);
